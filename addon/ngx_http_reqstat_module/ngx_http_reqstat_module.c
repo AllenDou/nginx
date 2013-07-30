@@ -215,8 +215,8 @@ ngx_http_reqstat_log_handler (ngx_http_request_t *r) {
     ngx_shmtx_lock(&hdr->mutex);
 
     /*bytes.*/
-    (void) ngx_atomic_fetch_add (REQSTAT_FIELD_BYTES_IN(it), c->nread);    
-    (void) ngx_atomic_fetch_add (REQSTAT_FIELD_BYTES_OUT(it), c->sent);    
+    (void) ngx_atomic_fetch_add(REQSTAT_FIELD_BYTES_IN(it), c->nread);    
+    (void) ngx_atomic_fetch_add(REQSTAT_FIELD_BYTES_OUT(it), c->sent);    
 
     *REQSTAT_FIELD_CONN_TOTAL(it) = *ngx_stat_conn_total;
     *REQSTAT_FIELD_CONN_ING(it)   = *ngx_stat_active;
@@ -226,8 +226,8 @@ ngx_http_reqstat_log_handler (ngx_http_request_t *r) {
     ngx_time_update();
     now = ngx_time();
     if (now == it->tm) {
-        (void) ngx_atomic_fetch_add (REQSTAT_FIELD_CONN_RATE(it), 1);    
-        (void) ngx_atomic_fetch_add (REQSTAT_FIELD_REQ_RATE(it), 1);
+        (void) ngx_atomic_fetch_add(REQSTAT_FIELD_CONN_RATE(it), 1);    
+        (void) ngx_atomic_fetch_add(REQSTAT_FIELD_REQ_RATE(it), 1);
     } else {
         *REQSTAT_FIELD_CONN_RATE_PREV(it) = *REQSTAT_FIELD_CONN_RATE(it);
         *REQSTAT_FIELD_CONN_RATE(it) = 1;
@@ -252,7 +252,7 @@ ngx_http_reqstat_log_handler (ngx_http_request_t *r) {
     *REQSTAT_FIELD_RT_AVR(it) = ( (*REQSTAT_FIELD_RT_AVR(it)) * (*REQSTAT_FIELD_REQ_TOTAL(it)) + ms ) / \
                                                 (*REQSTAT_FIELD_REQ_TOTAL(it) + 1) ;
     
-    (void) ngx_atomic_fetch_add (REQSTAT_FIELD_REQ_TOTAL(it), 1);    
+    (void) ngx_atomic_fetch_add(REQSTAT_FIELD_REQ_TOTAL(it), 1);    
     
     /*unlock*/
     ngx_shmtx_unlock(&hdr->mutex);
