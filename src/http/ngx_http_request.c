@@ -208,6 +208,7 @@ ngx_http_init_connection(ngx_connection_t *c)
 
 #if (NGX_STAT_STUB)
     (void) ngx_atomic_fetch_add(ngx_stat_reading, 1);
+    (void) ngx_atomic_fetch_add(ngx_stat_conn_total, 1);
 #endif
 
     if (rev->ready) {
