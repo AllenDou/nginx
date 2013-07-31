@@ -75,6 +75,8 @@ ngx_atomic_t   ngx_stat_writing0;
 ngx_atomic_t  *ngx_stat_writing = &ngx_stat_writing0;
 ngx_atomic_t   ngx_stat_waiting0;
 ngx_atomic_t  *ngx_stat_waiting = &ngx_stat_waiting0;
+ngx_atomic_t   ngx_stat_conn_total0;
+ngx_atomic_t  *ngx_stat_conn_total = &ngx_stat_conn_total0;
 
 #endif
 
@@ -562,6 +564,7 @@ ngx_event_module_init(ngx_cycle_t *cycle)
     ngx_stat_reading = (ngx_atomic_t *) (shared + 7 * cl);
     ngx_stat_writing = (ngx_atomic_t *) (shared + 8 * cl);
     ngx_stat_waiting = (ngx_atomic_t *) (shared + 9 * cl);
+    ngx_stat_conn_total = (ngx_atomic_t *) (shared + 10 * cl);
 
 #endif
 

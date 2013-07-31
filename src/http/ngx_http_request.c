@@ -312,6 +312,10 @@ ngx_http_init_connection(ngx_connection_t *c)
     rev->handler = ngx_http_wait_request_handler;
     c->write->handler = ngx_http_empty_handler;
 
+#if (NGX_STAT_STUB)
+    (void) ngx_atomic_fetch_add(ngx_stat_conn_total, 1);
+#endif
+
 #if (NGX_HTTP_SPDY)
     if (hc->addr_conf->spdy) {
         rev->handler = ngx_http_spdy_init;
