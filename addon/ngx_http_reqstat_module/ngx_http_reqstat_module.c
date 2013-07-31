@@ -391,14 +391,18 @@ ngx_http_reqstat_show_handler (ngx_http_request_t *r) {
     b->memory = 1;
     b->temporary = 1;
 
+    b->last = ngx_slprintf(b->last, b->end, "%uA\n", smcf->workers);
+    
     for (i = 0; i < smcf->nsrv; i++, it++) {
 
-        b->last = ngx_slprintf(b->last, b->end, "ip: %s\n", it->key);
+        b->last = ngx_slprintf(b->last, b->end, "%s,FRONTEND,", it->key);
 
         for (j = 0; j < sizeof(fields) / sizeof(ngx_http_reqstat_field_t); j++) {
             ngx_uint_t *p = ZONE(it, fields[j].offset);
-            b->last = ngx_slprintf(b->last, b->end, "%s: %uA\n", fields[j].title.data, *p);
-        }    
+            b->last = ngx_slprintf(b->last, b->end, "%uA,", *p);
+        }
+
+        *(b->last - 1) = '\n'; 
     }
 
     b->last_buf = 1;
