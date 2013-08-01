@@ -1,0 +1,398 @@
+diff --git a/src/core/nginx.h b/src/core/nginx.h
+index b1107ad..bd09e14 100644
+--- a/src/core/nginx.h
++++ b/src/core/nginx.h
+@@ -10,8 +10,8 @@
+ 
+ 
+ #define nginx_version      1004002
+-#define NGINX_VERSION      "1.4.2"
+-#define NGINX_VER          "nginx/" NGINX_VERSION
++#define NGINX_VERSION      "1.0.6"
++#define NGINX_VER          "spanner/" NGINX_VERSION
+ 
+ #define NGINX_VAR          "NGINX"
+ #define NGX_OLDPID_EXT     ".oldbin"
+diff --git a/src/core/ngx_log.c b/src/core/ngx_log.c
+index d7830fb..a24d153 100644
+--- a/src/core/ngx_log.c
++++ b/src/core/ngx_log.c
+@@ -10,7 +10,7 @@
+ 
+ 
+ static char *ngx_error_log(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+-
++extern void ngx_http_tracker_add_error_count();
+ 
+ static ngx_command_t  ngx_errlog_commands[] = {
+ 
+@@ -141,6 +141,7 @@ ngx_log_error_core(ngx_uint_t level, ngx_log_t *log, ngx_err_t err,
+     ngx_linefeed(p);
+ 
+     (void) ngx_write_fd(log->file->fd, errstr, p - errstr);
++    ngx_http_tracker_add_error_count();
+ 
+     if (!ngx_use_stderr
+         || level > NGX_LOG_WARN
+diff --git a/src/event/ngx_event.c b/src/event/ngx_event.c
+index c4c6120..eb152c7 100644
+--- a/src/event/ngx_event.c
++++ b/src/event/ngx_event.c
+@@ -75,6 +75,10 @@ ngx_atomic_t   ngx_stat_writing0;
+ ngx_atomic_t  *ngx_stat_writing = &ngx_stat_writing0;
+ ngx_atomic_t   ngx_stat_waiting0;
+ ngx_atomic_t  *ngx_stat_waiting = &ngx_stat_waiting0;
++ngx_atomic_t   ngx_stat_ssl_new0;
++ngx_atomic_t  *ngx_stat_ssl_new = &ngx_stat_ssl_new0;
++ngx_atomic_t   ngx_stat_ssl_reused0;
++ngx_atomic_t  *ngx_stat_ssl_reused = &ngx_stat_ssl_reused0;
+ 
+ #endif
+ 
+@@ -514,8 +518,9 @@ ngx_event_module_init(ngx_cycle_t *cycle)
+            + cl          /* ngx_stat_active */
+            + cl          /* ngx_stat_reading */
+            + cl          /* ngx_stat_writing */
+-           + cl;         /* ngx_stat_waiting */
+-
++           + cl          /* ngx_stat_waiting */
++           + cl          /* ngx_stat_ssl_new */
++           + cl;         /* ngx_stat_ssl_reused */
+ #endif
+ 
+     shm.size = size;
+@@ -562,6 +567,8 @@ ngx_event_module_init(ngx_cycle_t *cycle)
+     ngx_stat_reading = (ngx_atomic_t *) (shared + 7 * cl);
+     ngx_stat_writing = (ngx_atomic_t *) (shared + 8 * cl);
+     ngx_stat_waiting = (ngx_atomic_t *) (shared + 9 * cl);
++    ngx_stat_ssl_new = (ngx_atomic_t *) (shared + 10 * cl);
++    ngx_stat_ssl_reused = (ngx_atomic_t *) (shared + 11 * cl);
+ 
+ #endif
+ 
+diff --git a/src/event/ngx_event.h b/src/event/ngx_event.h
+index 93c457c..7fd09d0 100644
+--- a/src/event/ngx_event.h
++++ b/src/event/ngx_event.h
+@@ -512,6 +512,8 @@ extern ngx_atomic_t  *ngx_stat_active;
+ extern ngx_atomic_t  *ngx_stat_reading;
+ extern ngx_atomic_t  *ngx_stat_writing;
+ extern ngx_atomic_t  *ngx_stat_waiting;
++extern ngx_atomic_t  *ngx_stat_ssl_new;
++extern ngx_atomic_t  *ngx_stat_ssl_reused;
+ 
+ #endif
+ 
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 62ce12c..d1347e2 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -716,13 +716,20 @@ ngx_ssl_handshake(ngx_connection_t *c)
+ {
+     int        n, sslerr;
+     ngx_err_t  err;
+-
++    ngx_shm_zone_t *shm_zone;
++    ngx_ssl_session_cache_t *cache;
++    
+     ngx_ssl_clear_error(c->log);
+ 
+     n = SSL_do_handshake(c->ssl->connection);
+ 
+     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
+ 
++#if (NGX_HTTP_SSL)
++    shm_zone = SSL_CTX_get_ex_data(SSL_get_SSL_CTX(c->ssl->connection), ngx_ssl_session_cache_index);
++    cache = shm_zone->data;
++#endif
++
+     if (n == 1) {
+ 
+         if (ngx_handle_read_event(c->read, 0) != NGX_OK) {
+@@ -1766,6 +1773,40 @@ ngx_ssl_session_cache_init(ngx_shm_zone_t *shm_zone, void *data)
+     ngx_sprintf(shpool->log_ctx, " in SSL session shared cache \"%V\"%Z",
+                 &shm_zone->shm.name);
+ 
++#if (NGX_HTTP_SSL)
++    cache->sci.ngx_ssl_session_reused = ngx_slab_alloc(shpool, sizeof(ngx_atomic_t));
++    if(NULL == cache->sci.ngx_ssl_session_reused)
++    {
++        return NGX_ERROR;
++    }
++    cache->sci.ngx_ssl_session_created = ngx_slab_alloc(shpool, sizeof(ngx_atomic_t));
++    if(NULL == cache->sci.ngx_ssl_session_created)
++    {
++        return NGX_ERROR;
++    }
++    cache->sci.ngx_ssl_session_number = ngx_slab_alloc(shpool, sizeof(ngx_atomic_t));
++    if(NULL == cache->sci.ngx_ssl_session_number)
++    {
++        return NGX_ERROR;
++    }
++    cache->sci.ngx_ssl_cache_used = ngx_slab_alloc(shpool, sizeof(size_t));
++    if(NULL == cache->sci.ngx_ssl_cache_used)
++    {
++        return NGX_ERROR;
++    }
++    cache->sci.ngx_ssl_session_removed = ngx_slab_alloc(shpool, sizeof(ngx_atomic_t));
++    if(NULL == cache->sci.ngx_ssl_session_removed)
++    {
++        return NGX_ERROR;
++    }
++    
++    *cache->sci.ngx_ssl_session_reused = 0;
++    *cache->sci.ngx_ssl_session_created = 0;
++    *cache->sci.ngx_ssl_session_number = 0;
++    *cache->sci.ngx_ssl_cache_used = 0;
++    *cache->sci.ngx_ssl_session_removed = 0;
++#endif
++
+     return NGX_OK;
+ }
+ 
+@@ -1901,6 +1942,12 @@ ngx_ssl_new_session(ngx_ssl_conn_t *ssl_conn, ngx_ssl_session_t *sess)
+ 
+     ngx_rbtree_insert(&cache->session_rbtree, &sess_id->node);
+ 
++#if (NGX_HTTP_SSL)
++    (void)ngx_atomic_fetch_add(cache->sci.ngx_ssl_session_created, 1);
++    (void)ngx_atomic_fetch_add(cache->sci.ngx_ssl_session_number, 1);
++    *cache->sci.ngx_ssl_cache_used += sess_id->len;
++#endif
++
+     ngx_shmtx_unlock(&shpool->mutex);
+ 
+     return 0;
+@@ -2000,6 +2047,8 @@ ngx_ssl_get_cached_session(ngx_ssl_conn_t *ssl_conn, u_char *id, int len,
+                 return sess;
+             }
+ 
++           *cache->sci.ngx_ssl_cache_used -= sess_id->len;
++
+             ngx_queue_remove(&sess_id->queue);
+ 
+             ngx_rbtree_delete(&cache->session_rbtree, node);
+@@ -2012,6 +2061,9 @@ ngx_ssl_get_cached_session(ngx_ssl_conn_t *ssl_conn, u_char *id, int len,
+ 
+             sess = NULL;
+ 
++            (void)ngx_atomic_fetch_add(cache->sci.ngx_ssl_session_removed,1);
++            (void)ngx_atomic_fetch_add(cache->sci.ngx_ssl_session_number,-1);
++
+             goto done;
+         }
+ 
+@@ -2091,6 +2143,8 @@ ngx_ssl_remove_session(SSL_CTX *ssl, ngx_ssl_session_t *sess)
+ 
+         if (rc == 0) {
+ 
++            *cache->sci.ngx_ssl_cache_used -= sess_id->len;
++
+             ngx_queue_remove(&sess_id->queue);
+ 
+             ngx_rbtree_delete(&cache->session_rbtree, node);
+@@ -2101,6 +2155,9 @@ ngx_ssl_remove_session(SSL_CTX *ssl, ngx_ssl_session_t *sess)
+ #endif
+             ngx_slab_free_locked(shpool, sess_id);
+ 
++            (void)ngx_atomic_fetch_add(cache->sci.ngx_ssl_session_removed,1);
++            (void)ngx_atomic_fetch_add(cache->sci.ngx_ssl_session_number,-1);
++
+             goto done;
+         }
+ 
+@@ -2137,6 +2194,8 @@ ngx_ssl_expire_sessions(ngx_ssl_session_cache_t *cache,
+             return;
+         }
+ 
++        *cache->sci.ngx_ssl_cache_used -= sess_id->len;
++
+         ngx_queue_remove(q);
+ 
+         ngx_log_debug1(NGX_LOG_DEBUG_EVENT, ngx_cycle->log, 0,
+@@ -2149,6 +2208,9 @@ ngx_ssl_expire_sessions(ngx_ssl_session_cache_t *cache,
+         ngx_slab_free_locked(shpool, sess_id->id);
+ #endif
+         ngx_slab_free_locked(shpool, sess_id);
++
++        (void)ngx_atomic_fetch_add(cache->sci.ngx_ssl_session_removed,1);
++        (void)ngx_atomic_fetch_add(cache->sci.ngx_ssl_session_number,-1);
+     }
+ }
+ 
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index bf81d25..5d6ba5e 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -60,6 +60,7 @@ typedef struct {
+ #define NGX_SSL_MAX_SESSION_SIZE  4096
+ 
+ typedef struct ngx_ssl_sess_id_s  ngx_ssl_sess_id_t;
++typedef struct ngx_ssl_cache_info_s ngx_ssl_cache_info_t;
+ 
+ struct ngx_ssl_sess_id_s {
+     ngx_rbtree_node_t           node;
+@@ -74,11 +75,21 @@ struct ngx_ssl_sess_id_s {
+ #endif
+ };
+ 
++struct ngx_ssl_cache_info_s{
++    ngx_atomic_t *ngx_ssl_session_reused;
++    ngx_atomic_t *ngx_ssl_session_created;
++    ngx_atomic_t *ngx_ssl_session_number;
++    size_t *ngx_ssl_cache_used;
++    ngx_atomic_t *ngx_ssl_session_removed;
++};
+ 
+ typedef struct {
+     ngx_rbtree_t                session_rbtree;
+     ngx_rbtree_node_t           sentinel;
+     ngx_queue_t                 expire_queue;
++#if (NGX_HTTP_SSL)
++    ngx_ssl_cache_info_t        sci;
++#endif
+ } ngx_ssl_session_cache_t;
+ 
+ 
+diff --git a/src/http/modules/ngx_http_stub_status_module.c b/src/http/modules/ngx_http_stub_status_module.c
+index 83a35cd..ba0b03e 100644
+--- a/src/http/modules/ngx_http_stub_status_module.c
++++ b/src/http/modules/ngx_http_stub_status_module.c
+@@ -87,6 +87,7 @@ static ngx_int_t ngx_http_status_handler(ngx_http_request_t *r)
+     ngx_buf_t         *b;
+     ngx_chain_t        out;
+     ngx_atomic_int_t   ap, hn, ac, rq, rd, wr, wa;
++    ngx_atomic_int_t   sn, sr;
+ 
+     if (r->method != NGX_HTTP_GET && r->method != NGX_HTTP_HEAD) {
+         return NGX_HTTP_NOT_ALLOWED;
+@@ -113,7 +114,9 @@ static ngx_int_t ngx_http_status_handler(ngx_http_request_t *r)
+     size = sizeof("Active connections:  \n") + NGX_ATOMIC_T_LEN
+            + sizeof("server accepts handled requests\n") - 1
+            + 6 + 3 * NGX_ATOMIC_T_LEN
+-           + sizeof("Reading:  Writing:  Waiting:  \n") + 3 * NGX_ATOMIC_T_LEN;
++           + sizeof("Reading:  Writing:  Waiting:  \n") + 3 * NGX_ATOMIC_T_LEN
++           + sizeof("\nssl new reused\n") - 1
++           + 3 + 2 * NGX_ATOMIC_T_LEN;
+ 
+     b = ngx_create_temp_buf(r->pool, size);
+     if (b == NULL) {
+@@ -130,6 +133,8 @@ static ngx_int_t ngx_http_status_handler(ngx_http_request_t *r)
+     rd = *ngx_stat_reading;
+     wr = *ngx_stat_writing;
+     wa = *ngx_stat_waiting;
++    sn = *ngx_stat_ssl_new;
++    sr = *ngx_stat_ssl_reused;
+ 
+     b->last = ngx_sprintf(b->last, "Active connections: %uA \n", ac);
+ 
+@@ -138,6 +143,11 @@ static ngx_int_t ngx_http_status_handler(ngx_http_request_t *r)
+ 
+     b->last = ngx_sprintf(b->last, " %uA %uA %uA \n", ap, hn, rq);
+ 
++    b->last = ngx_cpymem(b->last, "ssl new reused\n",
++                         sizeof("ssl new reused\n") - 1);
++
++    b->last = ngx_sprintf(b->last, "   %uA %uA\n", sn, sr);
++
+     b->last = ngx_sprintf(b->last, "Reading: %uA Writing: %uA Waiting: %uA \n",
+                           rd, wr, wa);
+ 
+diff --git a/src/http/ngx_http_header_filter_module.c b/src/http/ngx_http_header_filter_module.c
+index 707a813..971ce09 100644
+--- a/src/http/ngx_http_header_filter_module.c
++++ b/src/http/ngx_http_header_filter_module.c
+@@ -46,7 +46,7 @@ ngx_module_t  ngx_http_header_filter_module = {
+ };
+ 
+ 
+-static char ngx_http_server_string[] = "Server: nginx" CRLF;
++static char ngx_http_server_string[] = "Server: spanner" CRLF;
+ static char ngx_http_server_full_string[] = "Server: " NGINX_VER CRLF;
+ 
+ 
+diff --git a/src/http/ngx_http_request.h b/src/http/ngx_http_request.h
+index bd842df..3d2395c 100644
+--- a/src/http/ngx_http_request.h
++++ b/src/http/ngx_http_request.h
+@@ -496,6 +496,7 @@ struct ngx_http_request_s {
+      */
+     unsigned                          limit_conn_set:1;
+     unsigned                          limit_req_set:1;
++    unsigned                          limit_qps_set:1;
+ 
+ #if 0
+     unsigned                          cacheable:1;
+diff --git a/src/http/ngx_http_upstream.c b/src/http/ngx_http_upstream.c
+index 45e2eb7..82b5c3b 100644
+--- a/src/http/ngx_http_upstream.c
++++ b/src/http/ngx_http_upstream.c
+@@ -4525,7 +4525,7 @@ ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ {
+     ngx_http_upstream_srv_conf_t  *uscf = conf;
+ 
+-    time_t                       fail_timeout;
++    time_t                       fail_timeout,freeze_time;;
+     ngx_str_t                   *value, s;
+     ngx_url_t                    u;
+     ngx_int_t                    weight, max_fails;
+@@ -4566,6 +4566,7 @@ ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+     weight = 1;
+     max_fails = 1;
+     fail_timeout = 10;
++    freeze_time = 60;
+ 
+     for (i = 2; i < cf->args->nelts; i++) {
+ 
+@@ -4617,6 +4618,20 @@ ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+             continue;
+         }
+ 
++        if (ngx_strncmp(value[i].data, "freeze_time=", 12) == 0) {
++
++            s.len = value[i].len - 12;
++            s.data = &value[i].data[12];
++
++            freeze_time = ngx_parse_time(&s, 1);
++
++            if (freeze_time == NGX_ERROR) {
++                goto invalid;
++            }
++
++            continue;
++        }
++
+         if (ngx_strncmp(value[i].data, "backup", 6) == 0) {
+ 
+             if (!(uscf->flags & NGX_HTTP_UPSTREAM_BACKUP)) {
+@@ -4647,6 +4662,7 @@ ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+     us->weight = weight;
+     us->max_fails = max_fails;
+     us->fail_timeout = fail_timeout;
++    us->freeze_time = freeze_time;
+ 
+     return NGX_CONF_OK;
+ 
+diff --git a/src/http/ngx_http_upstream.h b/src/http/ngx_http_upstream.h
+index 29ebf9b..4cfdd2c 100644
+--- a/src/http/ngx_http_upstream.h
++++ b/src/http/ngx_http_upstream.h
+@@ -90,6 +90,7 @@ typedef struct {
+     ngx_uint_t                       weight;
+     ngx_uint_t                       max_fails;
+     time_t                           fail_timeout;
++    time_t                           freeze_time;
+ 
+     unsigned                         down:1;
+     unsigned                         backup:1;
+@@ -110,6 +111,10 @@ struct ngx_http_upstream_srv_conf_s {
+ 
+     ngx_array_t                     *servers;  /* ngx_http_upstream_server_t */
+ 
++    ngx_array_t                     *values;
++    ngx_array_t                     *lengths;
++    ngx_uint_t                       retries;
++
+     ngx_uint_t                       flags;
+     ngx_str_t                        host;
+     u_char                          *file_name;

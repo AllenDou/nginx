@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/t/lib
+END
+Memcached.lua
+K 25
+svn:wc:ra_dav:version-url
+V 81
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/t/lib/Memcached.lua
+END
+Redis.lua
+K 25
+svn:wc:ra_dav:version-url
+V 77
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/t/lib/Redis.lua
+END
+CRC32.lua
+K 25
+svn:wc:ra_dav:version-url
+V 77
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/t/lib/CRC32.lua
+END

@@ -1,0 +1,54 @@
+#NIII dump fuse map script
+
+#Which bits are set...create and print a map
+dumpbits()
+{
+        i=31
+        while [ $i -ge 0 ]
+        do
+                let "j = 1 << i"
+                let "biton = $j & $1"
+#is bit set?
+                if [ $biton -gt 0 ]
+                then 
+#then echo 1
+                        echo -n "1"
+                else
+#else echo 0
+                        echo -n "0"
+                fi
+
+                let "i -= 1"
+        done
+        echo ""
+}
+
+#Read the FUSE registers
+
+val=0
+oldbitnum=0
+echo "Fuse Bit   Addr   Value        Bit map"
+echo "---------------------------------------------------------------"
+#address offsets
+addr=(00 08 10 18 20 28 30 38)
+for i in {0..7} 
+do
+        #calculate the address to read from
+        let "addr = $i * 8"
+
+        #Calculate bit numbers
+        let "bitnum = ($addr + 8) * 4 -1"
+        printf "%-3d - %-3d  " $bitnum $oldbitnum
+        let "oldbitnum = $bitnum + 1"
+        
+        #The offset
+        offset="0x100${addr[$i]}"
+        printf "%-7x" $offset
+        
+        #Read from {BAR0 + offset} and extract the values
+        val=`echo "r 0:${offset} x " | ./n1debug | grep Value | cut -d' ' -f3`
+        
+        echo -n "$val   "
+        #Print the map 
+        dumpbits $val
+done

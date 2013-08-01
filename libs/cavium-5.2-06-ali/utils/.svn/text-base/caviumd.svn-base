@@ -1,0 +1,76 @@
+#!/bin/bash
+## BEGIN INIT INFO
+# Provides: caviumd
+# Default-Start: 3 4 5
+# Default-Stop: 0 1 2 6
+# Required-Start:
+#
+## END INIT INFO
+# caviumd:        Set up /dev/pkp_dev mountpoint to be shared
+#
+# chkconfig: 345 1 99
+#
+# description: caviumd setup the environment for Cavium SSL offloading
+#
+
+# Source function library.
+. /etc/init.d/functions
+
+USR=ec2-user
+
+base=${0##*/}
+
+stop() {
+	[ $# -eq 0 ] && echo -n "Stopping caviumd"
+
+	[ -n "`lsmod |awk '$1=="pkp_drv"{print}'`" ] && rmmod pkp_drv || return $?
+
+	[ -c /dev/pkp_dev ] && rm -f /dev/pkp_dev || return $?
+}
+
+start() {
+	echo -n 'Starting caviumd'
+
+	stop 1
+
+	lspci |grep Cavium >/dev/null 2>&1 && \
+	insmod /lib/modules/`uname -r`/extra/pkp_drv.ko ssl=0 n3_only=1 || return $?
+
+	sleep 1
+
+	[[ -n "`cav_init ssl=0 |grep -F Succeed 2>/dev/null`" ]] && \
+		chmod a+rw /dev/pkp_dev || return $?
+}
+
+status() {
+	lsmod |awk '$1=="pkp_drv"{print}' >/dev/null 2>&1 && \
+	[[ `stat --printf="%a" /dev/pkp_dev 2>/dev/null` == "666" ]] && \
+		echo "$base is running" || echo "$base is stopped"
+}
+
+case "$1" in
+    restart)
+	stop && success || failure
+	[ $? -eq 0 ] && echo && start && success || failure
+	echo
+	;;
+
+    start)
+	start && success || failure
+	echo
+	;;
+
+    stop)
+	stop && success || failure
+	echo
+	;;
+
+    status)
+	status
+	;;
+
+    *)
+	echo $"Usage: $0 {start|stop|status|restart}"
+	exit 3
+	;;
+esac

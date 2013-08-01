@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/svn/sop-arch/!svn/ver/787/spanner-142/addon/ngx_http_reqstat_module
+END
+ngx_http_reqstat_module.c
+K 25
+svn:wc:ra_dav:version-url
+V 94
+/svn/sop-arch/!svn/ver/787/spanner-142/addon/ngx_http_reqstat_module/ngx_http_reqstat_module.c
+END
+config
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/sop-arch/!svn/ver/787/spanner-142/addon/ngx_http_reqstat_module/config
+END
+rb.h
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/svn/sop-arch/!svn/ver/787/spanner-142/addon/ngx_http_reqstat_module/rb.h
+END

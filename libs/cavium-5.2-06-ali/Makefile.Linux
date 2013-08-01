@@ -1,0 +1,299 @@
+# Enable this flag to compile the SDK
+# for OCTEON Linux
+# 
+#LINUX_ARCH := OCTEON
+
+# For cross compiling SDK tools
+# The path of the cross compiled openssl
+#OCTSSL := /usr/local/sslmips
+
+
+ifeq ($(LINUX_ARCH),OCTEON)
+ARCH := mips64
+CROSS_COMPILE = mips64-octeon-linux-gnu-
+DRIVER_DEFINES += -D__octeon__
+KERNEL_PATH := /usr/local/Cavium_Networks/OCTEON-SDK/linux/kernel_2.6/linux
+OCTSSLLIB = $(OCTSSL)/lib
+CFLAGS += -I$(OCTSSL)/include
+else
+ARCH := $(shell uname -m)
+KERNEL_PATH := /lib/modules/$(shell uname -r)/build
+OCTSSLLIB = .
+endif
+
+#ARCH := $(shell uname -m)
+#ARCH := mips64 
+#CROSS_COMPILE = mips64-octeon-linux-gnu-
+CC          = $(CROSS_COMPILE)gcc
+LD          = $(CROSS_COMPILE)ld
+STRIP       = $(CROSS_COMPILE)strip
+
+#KERNEL_PATH := /lib/modules/$(shell uname -r)/build
+#KERNEL_PATH := /usr/local/Cavium_Networks/CN3XXX-SDK/linux/kernel_2.6/linux
+
+LINUX_VERSION=$(shell uname -r | sed -e 's/2.\(.\).*/2.\1/g') 
+LINUX_SRC_VERSION=$(shell grep -m 1 PATCHLEVEL $(KERNEL_PATH)/Makefile | sed -e 's/.*= \(.*\)/2.\1/g')
+
+#User Configurable Section.
+
+# Please specify the MICROCODE used  :MC1/MC2.
+# Do a make clean if MICROCODE is changed.
+
+MICROCODE=MC2
+
+# Please specify if Data Statistics required (y/n)
+COUNTERS=y
+
+# 
+# To enable MSIX use the following flag
+#
+#DRIVER_DEFINES += -DMSIX_ENABLED
+
+
+#
+# Dump failing requests [prints the failing
+# input and output buffers, ctx data, registers etc]
+# Do a make clean,  and make if this flag is modified.
+#
+#DRIVER_DEFINES  += -DDUMP_FAILING_REQUESTS
+
+#Specify multicard support or not (uncomment).
+
+#END of user configurable options.
+
+
+APP_DEFINES     += $(MICROCODE)
+ifeq ($(COUNTERS),y)
+DRIVER_DEFINES	+= -DCOUNTER_ENABLE
+endif
+#DRIVER_DEFINES	+= -DSLOW_CPU
+
+#define driver debug level
+CAVIUM_DEBUG_LEVEL=0
+DRIVER_DEFINES += -DCAVIUM_DEBUG_LEVEL=$(CAVIUM_DEBUG_LEVEL)
+#DRIVER_DEFINES += -DUSER_SCATTER
+
+.PHONY: err
+
+ifndef $(CAV_TOPDIR)
+CAV_TOPDIR  := $(shell /bin/pwd)
+endif
+TOPDIR=$(CAV_TOPDIR)
+
+ifeq (86,$(findstring 86,$(ARCH)))
+ARCH=x86
+else
+#ifeq (i686,$(findstring i686,$(ARCH)))
+#ARCH=x86
+#else
+ifeq (mips,$(findstring mips,$(ARCH)))
+ARCH=mips
+else
+ifeq (ppc,$(findstring ppc,$(ARCH)))
+ARCH=ppc
+endif
+endif
+endif
+#endif
+
+ifeq ($(ARCH),x86)
+ENDIAN=le
+KERNELDIR=$(KERNEL_PATH)
+ARCH_INCLUDEDIR = . 
+else
+ifeq ($(ARCH), mips)
+KERNELDIR=$(KERNEL_PATH)
+ENDIAN=be
+DRIVER_DEFINES += -D__BIG_ENDIAN__
+#ARCH_DRIVERFLAGS = -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fomit-frame-pointer -G 0 -mno-abicalls -fno-pic -pipe -mcpu=sb1 -mips2 -Wa,--trap -mlong-calls
+#ARCH_APPFLAGS = -Wstrict-prototypes -O -Wno-trigraphs -fno-strict-aliasing -fomit-frame-pointer -G 0 -fpic -pipe -mcpu=sb1 -mips2 -Wa,--trap -mlong-calls
+ARCH_INCLUDEDIR = $(KERNELDIR)/include/asm/gcc 
+else
+ifeq ($(ARCH),ppc)
+ENDIAN=be
+KERNELDIR=$(KERNEL_PATH)
+ARCH_DRIVERFLAGS = -msoft-float
+ARCH_INCLUDEDIR = . 
+endif 
+endif 
+endif
+
+DRIVER_DEFINES	    += -DCAVIUM_RESOURCE_CHECK
+#DRIVER_DEFINES	    += -DCAVIUM_ECRNG
+ifeq ($(MICROCODE),MC1)
+DRIVER_DEFINES	+= -DMC1
+endif
+
+ifeq ($(MICROCODE),MC2)
+DRIVER_DEFINES	+= -DMC2
+endif
+
+INIT_NITROX=init_nitrox
+
+POTS_SUBDIR= pots
+
+CSP1_BIN = csp1_init
+RC4_BIN  = test_rc4
+DES_BIN  = test_3des
+RND_BIN  = test_rnd
+REQ_BIN  = test_req
+DBG_BIN  = n1debug
+#N1OP_BIN = simop
+ifeq (CAVIUM_ECRNG,$(findstring CAVIUM_ECRNG,$(DRIVER_DEFINES)))
+ECC_BIN   = test_ecc
+ECC_NB_BIN = test_ecc_nb
+endif
+
+DRIVER_OBJ = pkp_drv.ko
+DEV_MAJOR=125
+DEV_PREFIX=pkp
+
+export DRIVER_DEFINES CAVIUM_DEBUG_LEVEL CAV_TOPDIR LINUX_VERSION KERNEL_PATH MICROCODE 
+
+
+#
+# $Id: Makefile.Linux,v 1.51 2011/02/09 09:32:35 tghoriparti Exp $
+# $Log: Makefile.Linux,v $
+# Revision 1.51  2011/02/09 09:32:35  tghoriparti
+# Disabled CAVIUM_ECRNG for general release
+#
+# Revision 1.50  2011/02/09 07:02:28  tghoriparti
+# Add ECC_BIN and ECC_NB_BIN if CAVIUM_ECRNG is defined
+#
+# Revision 1.49  2011/01/03 13:46:14  tghoriparti
+# ECRNG enabled by default in Makefile.Linux and IOCTL_GET_RANDOM will give randome numbers generated through ECRNG method if CAVIUM_ECRNG is defined
+#
+# Revision 1.48  2010/05/27 07:51:07  kkiran
+# - simop test is not required for release-3.0.
+#
+# Revision 1.47  2010/05/13 07:36:50  kkiran
+#  - ECC related build avoided. Not required for TurboSSL/IPSec SDK releases.
+#
+# Revision 1.46  2010/05/06 11:41:30  kkiran
+#  - CAVIUM_MULTICARD_API is no longer required.
+#
+# Revision 1.45  2010/05/04 10:25:56  kkiran
+#  -DRANDOM no where used in the driver.
+#  This is required in the TurboSSL for ECRNG offload.
+#
+# Revision 1.44  2010/04/28 11:40:08  vagrawal
+# - Added new flag RANDOM to use PX_ECRNG for random number generation.
+#
+# Revision 1.43  2010/04/16 04:57:35  bsaritha
+# Disable USE_SCATTER
+#
+# Revision 1.42  2010/02/16 11:08:13  vagrawal
+# Added Scatter-Gather Support for large amount of data.
+#
+# Revision 1.41  2009/09/15 05:58:44  aravikumar
+# MLM_PROTOCOL and CAVIUM_MICROCODE dependency removed
+#
+# Revision 1.40  2009/09/09 15:09:58  aravikumar
+# NPLUS macro dependency removed and made it dynamic
+#
+# Revision 1.39  2009/05/15 10:55:10  kmonendra
+# Removed cavium_rdtsc.h file.
+#
+# Revision 1.38  2009/02/25 10:00:33  sgadam
+# - IRQ_COALEASCING flag removed
+#
+# Revision 1.37  2008/12/22 05:44:43  jrana
+#  COUNTERs and COALEASCING added
+#
+# Revision 1.36  2008/11/28 08:04:03  ysandeep
+# Removed SSL_MLM
+#
+# Revision 1.35  2008/11/06 09:05:17  ysandeep
+# Removed PX_PLUS
+#
+# Revision 1.34  2008/10/24 06:05:36  ysandeep
+# POTS made to compile for NPLUS
+#
+# Revision 1.33  2008/10/16 09:25:11  aramesh
+# CAVIUM_MULTICARD_API is commented.
+#
+# Revision 1.32  2008/10/16 08:37:56  ysandeep
+# default value of CONFIG_NPLUS is set to 'n'
+#
+# Revision 1.31  2008/10/15 08:03:38  ysandeep
+# Multicard support for NPLUS added.
+#
+# Revision 1.30  2008/07/07 05:43:27  aramesh
+# done IPSEC compilation errors.
+#
+# Revision 1.29  2008/07/02 12:56:59  aramesh
+# CAVIUM_DEBUG_LEVEL changed to 0
+#
+# Revision 1.28  2008/07/02 12:21:07  aramesh
+# deleted config part and corresponding flags.
+#
+# Revision 1.27  2008/05/15 08:48:32  sgadam
+# -CN1500 Flag added
+#
+# Revision 1.26  2008/03/11 08:52:17  kchunduri
+# Use Exact part number for CN15XX family.
+#
+# Revision 1.25  2008/02/29 13:59:28  tghoriparti
+# microcode links created properly for IPSEC MC2 microcode.
+#
+# Revision 1.24  2008/02/22 13:43:01  aramesh
+# exported MLM_PROTOCOL.
+#
+# Revision 1.23  2008/02/22 07:13:34  aramesh
+# driver cleanup done.
+#
+# Revision 1.22  2008/02/12 13:03:33  kchunduri
+# --Use exact part number for CN16XX family.
+#
+# Revision 1.21  2008/01/21 10:17:26  aramesh
+# added non-blocking support to ECC-API
+#
+# Revision 1.16  2007/12/07 05:30:58  ksadasivuni
+# ECC PX_ECC_FreeContext changes.
+#
+# Revision 1.15  2007/11/21 07:12:40  ksadasivuni
+# The following line added.
+# DRIVER_DEFINES +=-DCAVIUM_DEBUG_LEVEL=$(CAVIUM_DEBUG_LEVEL)
+#
+# Revision 1.14  2007/10/24 11:29:21  aramesh
+# linking errors fixed
+#
+# Revision 1.13  2007/10/24 05:25:23  aramesh
+# NITROX_PX defined only if CONFIG_PART is either CN1600 or CN1500
+#
+# Revision 1.12  2007/10/16 12:40:19  aramesh
+# -- Changes to support NLite/N1 family
+#
+# Revision 1.11  2007/09/20 05:36:51  kchunduri
+# --new application flag 'CAVIUM_MULTICARD_API' defined.
+#
+# Revision 1.10  2007/07/16 12:30:47  tghoriparti
+# microcode files updated in case of PX and SSL(MC1)
+#
+# Revision 1.9  2007/06/15 07:55:37  rsruthi
+# --Added the PX_PLUS flag for Nitrox_PX in PLUS mode
+#
+# Revision 1.8  2007/05/01 05:55:38  kchunduri
+# * moved flag definitions from Makefile and utils/Makefile to work it on FreeBSD env.
+#
+# Revision 1.7  2007/04/05 03:04:48  panicker
+# * Makefile corrections before CN1600 pre-release
+#
+# Revision 1.6  2007/04/04 21:48:10  panicker
+# * Added support for CN1600
+#
+# Revision 1.5  2007/03/08 20:34:48  panicker
+# * NPLUS mode changes. pre-release
+#
+# Revision 1.4  2007/02/21 04:21:06  panicker
+# Modified Makefile for pre-release
+#
+# Revision 1.3  2007/02/20 23:17:57  panicker
+# * kernel path is linux
+#
+# Revision 1.2  2007/02/02 02:20:22  panicker
+# * Make for Octeon. NLE and N1 driver have different names currently
+#
+# Revision 1.1  2007/01/13 03:03:40  panicker
+# Makefiles
+#

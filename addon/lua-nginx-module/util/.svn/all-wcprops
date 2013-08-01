@@ -1,0 +1,71 @@
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util
+END
+gdbinit
+K 25
+svn:wc:ra_dav:version-url
+V 74
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/gdbinit
+END
+revim
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/revim
+END
+update-readme.sh
+K 25
+svn:wc:ra_dav:version-url
+V 83
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/update-readme.sh
+END
+build.sh
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/build.sh
+END
+fix-comments
+K 25
+svn:wc:ra_dav:version-url
+V 79
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/fix-comments
+END
+build2.sh
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/build2.sh
+END
+ngx-links
+K 25
+svn:wc:ra_dav:version-url
+V 76
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/ngx-links
+END
+releng
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/releng
+END
+run_test.sh
+K 25
+svn:wc:ra_dav:version-url
+V 78
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/run_test.sh
+END
+retab
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/retab
+END
+reindex
+K 25
+svn:wc:ra_dav:version-url
+V 74
+/svn/sop-arch/!svn/ver/780/spanner-142/addon/lua-nginx-module/util/reindex
+END

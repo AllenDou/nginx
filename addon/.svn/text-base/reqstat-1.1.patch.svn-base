@@ -1,0 +1,73 @@
+diff --git a/src/core/ngx_connection.h b/src/core/ngx_connection.h
+index 3daf2ee..cf1fd8c 100644
+--- a/src/core/ngx_connection.h
++++ b/src/core/ngx_connection.h
+@@ -124,6 +124,7 @@ struct ngx_connection_s {
+ 
+     ngx_listening_t    *listening;
+ 
++    off_t               nread;
+     off_t               sent;
+ 
+     ngx_log_t          *log;
+diff --git a/src/event/ngx_event.c b/src/event/ngx_event.c
+index eb152c7..770dbe6 100644
+--- a/src/event/ngx_event.c
++++ b/src/event/ngx_event.c
+@@ -79,6 +79,8 @@ ngx_atomic_t   ngx_stat_ssl_new0;
+ ngx_atomic_t  *ngx_stat_ssl_new = &ngx_stat_ssl_new0;
+ ngx_atomic_t   ngx_stat_ssl_reused0;
+ ngx_atomic_t  *ngx_stat_ssl_reused = &ngx_stat_ssl_reused0;
++ngx_atomic_t   ngx_stat_conn_total0;
++ngx_atomic_t  *ngx_stat_conn_total = &ngx_stat_conn_total0;
+ 
+ #endif
+ 
+@@ -569,6 +571,7 @@ ngx_event_module_init(ngx_cycle_t *cycle)
+     ngx_stat_waiting = (ngx_atomic_t *) (shared + 9 * cl);
+     ngx_stat_ssl_new = (ngx_atomic_t *) (shared + 10 * cl);
+     ngx_stat_ssl_reused = (ngx_atomic_t *) (shared + 11 * cl);
++    ngx_stat_conn_total = (ngx_atomic_t *) (shared + 12 * cl);
+ 
+ #endif
+ 
+diff --git a/src/event/ngx_event.h b/src/event/ngx_event.h
+index 7fd09d0..4661acf 100644
+--- a/src/event/ngx_event.h
++++ b/src/event/ngx_event.h
+@@ -514,6 +514,7 @@ extern ngx_atomic_t  *ngx_stat_writing;
+ extern ngx_atomic_t  *ngx_stat_waiting;
+ extern ngx_atomic_t  *ngx_stat_ssl_new;
+ extern ngx_atomic_t  *ngx_stat_ssl_reused;
++extern ngx_atomic_t  *ngx_stat_conn_total;
+ 
+ #endif
+ 
+diff --git a/src/http/ngx_http_request.c b/src/http/ngx_http_request.c
+index c8c5d15..bfc0134 100644
+--- a/src/http/ngx_http_request.c
++++ b/src/http/ngx_http_request.c
+@@ -312,6 +312,10 @@ ngx_http_init_connection(ngx_connection_t *c)
+     rev->handler = ngx_http_wait_request_handler;
+     c->write->handler = ngx_http_empty_handler;
+ 
++#if (NGX_STAT_STUB)
++    (void) ngx_atomic_fetch_add(ngx_stat_conn_total, 1);
++#endif
++
+ #if (NGX_HTTP_SPDY)
+     if (hc->addr_conf->spdy) {
+         rev->handler = ngx_http_spdy_init;
+diff --git a/src/os/unix/ngx_recv.c b/src/os/unix/ngx_recv.c
+index 6a4a099..3225932 100644
+--- a/src/os/unix/ngx_recv.c
++++ b/src/os/unix/ngx_recv.c
+@@ -135,6 +135,8 @@ ngx_unix_recv(ngx_connection_t *c, u_char *buf, size_t size)
+     do {
+         n = recv(c->fd, buf, size, 0);
+ 
++        c->nread += n;
++
+         ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                        "recv: fd:%d %d of %d", c->fd, n, size);
+ 

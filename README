@@ -1,3 +1,38 @@
+Spanner 1.4.2 Release Notes
 
-Documentation is available at http://nginx.org
+Upgrading from spanner 1.2.0 to 1.4.2
+===============================================
+Spanner is now upgrading to 1.4.2, At the same time, All Spanner Team's work 
+are base on it. Please follow this rules.
+
+
+
+Patch Priciples
+===============================================
+1. All patch files should be place under addon/ directory.
+2. Keep your patch clean, simple,  
+3. Make sure you patch's order is ok.
+
+
+
+Patch Details
+===============================================
+Order:  No.1
+VER:    1.0
+Name:   spanner142-1.0.patch
+Date:   2013/7/31
+Func:   spanner' Basic function.
+Author: 涵畅 盛颜
+------: 
+
+Order:  No.2
+VER:    1.1
+Name:   reqstat-1.1.patch
+Date:   2013/7/31
+Func:   Server Traffic Statistics, VIP Statistics such as conn_total,
+        conn_count, req_total, req_count, bytes_in, bytes_out, rt_min, rt_max,
+        rt_avr, conn_rate, req_rate, etc.
+Author: 子逍(shunli.dsl@alibaba-inc.com)
+------: Nginx Module reqstat was developed by zixiao with github 
+        https://github.com/AllenDou/nginx.git branch 142reqstat.
 

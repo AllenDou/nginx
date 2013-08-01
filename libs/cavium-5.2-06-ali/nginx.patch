@@ -1,0 +1,87 @@
+diff -Nur nginx-1.2.0/src/event/ngx_event_openssl.h sp-120/nginx-1.2.0/src/event/ngx_event_openssl.h
+--- nginx-1.2.0/src/event/ngx_event_openssl.h	2013-04-01 20:43:25.637561478 +0800
++++ sp-120/nginx-1.2.0/src/event/ngx_event_openssl.h	2013-04-01 20:45:39.418561354 +0800
+@@ -47,6 +47,7 @@
+     unsigned                    buffer:1;
+     unsigned                    no_wait_shutdown:1;
+     unsigned                    no_send_shutdown:1;
++    unsigned                    waited:1;
+ } ngx_ssl_connection_t;
+ 
+ 
+diff -Nur nginx-1.2.0/src/event/ngx_event_openssl.c sp-120/nginx-1.2.0/src/event/ngx_event_openssl.c
+--- nginx-1.2.0/src/event/ngx_event_openssl.c	2013-04-01 20:43:25.636561478 +0800
++++ sp-120/nginx-1.2.0/src/event/ngx_event_openssl.c	2013-04-01 20:47:33.643561247 +0800
+@@ -137,6 +137,8 @@
+         return NGX_ERROR;
+     }
+ 
++    SSL_CTX_set_mode(ssl->ctx, SSL_MODE_NON_BLOCKING);
++
+     /* client side options */
+ 
+     SSL_CTX_set_options(ssl->ctx, SSL_OP_MICROSOFT_SESS_ID_BUG);
+@@ -585,11 +587,11 @@
+     ngx_ssl_session_cache_t *cache;
+ 
+     ngx_ssl_clear_error(c->log);
+-
++    
+     n = SSL_do_handshake(c->ssl->connection);
+ 
+     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
+-    
++
+ 
+ #if (NGX_HTTP_SSL)
+     shm_zone = SSL_CTX_get_ex_data(SSL_get_SSL_CTX(c->ssl->connection), ngx_ssl_session_cache_index);
+@@ -598,6 +600,8 @@
+ 
+     if (n == 1) {
+ 
++        c->ssl->waited = 0;
++
+         if (ngx_handle_read_event(c->read, 0) != NGX_OK) {
+             return NGX_ERROR;
+         }
+@@ -707,6 +711,22 @@
+         return NGX_AGAIN;
+     }
+ 
++    if (sslerr == SSL_ERROR_WAIT_OFFLOADING) {
++		if (c->ssl->waited) {
++			ngx_log_error(NGX_LOG_WARN, c->log, 0,
++				"SSL_ERROR_WAIT_OFFLOADING again: req_id=%d",
++				c->ssl->connection->req_id);
++		}
++/*
++        c->read->ready = 0;
++        c->read->handler = ngx_ssl_handshake_handler;
++		c->write->handler = ngx_ssl_handshake_handler;
++*/
++        ngx_event_add_timer(c->read, 4);
++
++        return NGX_AGAIN;
++    }
++
+     err = (sslerr == SSL_ERROR_SYSCALL) ? ngx_errno : 0;
+ 
+     c->ssl->no_wait_shutdown = 1;
+@@ -739,8 +759,15 @@
+                    "SSL handshake handler: %d", ev->write);
+ 
+     if (ev->timedout) {
+-        c->ssl->handler(c);
+-        return;
++    	if (SSL_wait_offloading(c->ssl->connection)) {
++            ev->timedout = 0;
++            c->ssl->waited = 1;
++//ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_wait_offloading timer event %p, req_id=%d", c->ssl->connection, c->ssl->connection->req_id);
++    	} else {
++//Log ("ngx_ssl_handshake_handler timedout");
++            c->ssl->handler(c);
++            return;
++        }
+     }
+ 
+     if (ngx_ssl_handshake(c) == NGX_AGAIN) {
